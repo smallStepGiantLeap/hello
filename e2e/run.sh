@@ -276,7 +276,9 @@ image . "$NAME"
 docker build -q --provenance=false -f e2e/Dockerfile.probe -t probe:e2e . >/dev/null
 kind load docker-image --name "$CLUSTER" probe:e2e >/dev/null
 deploy . "$NAME"
+identity frontend frontend
 identity intruder intruder
+identity frontend impostor
 decoy
 
 # --- assertions that are not single probes ----------------------------------
@@ -334,7 +336,9 @@ done
 
 echo
 echo "== who may call $NAME (authorizedCallers, ingress)"
+check reach "frontend is authorized for hello.v1.HelloService/Hello" -- probe_as frontend frontend frontend -- -target hello.hello.svc.cluster.local:50051 -method /hello.v1.HelloService/Hello
 check blocked "a namespace not in ingress is stopped by NetworkPolicy before it reaches the mesh" -- probe_as intruder intruder intruder -- -target hello.hello.svc.cluster.local:50051 -method /hello.v1.HelloService/Hello
+check deny "a pod in frontend wearing app=frontend but running as another service account passes NetworkPolicy; Istio denies it by identity" -- probe_as frontend impostor frontend -- -target hello.hello.svc.cluster.local:50051 -method /hello.v1.HelloService/Hello
 
 echo
 echo "== what $NAME may connect to (egress, from inside its own pod)"
@@ -352,8 +356,8 @@ assert "after promotion the stable Service takes all traffic again" -- eventuall
 
 echo
 echo "== node drain"
-skip "no caller is granted a unary method of $NAME, so there is no traffic to keep up during a node drain"
+ATTEMPTS=1 check no-errors "frontend keeps calling hello.v1.HelloService/Hello while a node running hello drains: no call fails" -- drain_under_load frontend frontend frontend -- -target hello.hello.svc.cluster.local:50051 -method /hello.v1.HelloService/Hello
 
 echo
-echo "$passed passed, $failed failed (of $((3 + 7 + 3)) checks)"
+echo "$passed passed, $failed failed (of $((6 + 7 + 3)) checks)"
 [[ "$failed" -eq 0 ]]

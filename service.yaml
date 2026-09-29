@@ -1,0 +1,8 @@
+# service.yaml for hello: nobody may call it yet, and it calls nothing.
+apiVersion: vikrant.smallstepgiantleap.dev/v1alpha1
+kind: Service
+metadata:
+  name: hello
+spec:
+  language: go
+  proto: proto/hello/v1/hello.proto

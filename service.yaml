@@ -1,4 +1,4 @@
-# service.yaml for hello: nobody may call it yet, and it calls nothing.
+# service.yaml for hello, owned by the hello team. Nobody may call it yet.
 apiVersion: vikrant.smallstepgiantleap.dev/v1alpha1
 kind: Service
 metadata:

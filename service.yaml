@@ -6,3 +6,8 @@ metadata:
 spec:
   language: go
   proto: proto/hello/v1/hello.proto
+  authorizedCallers:
+    - service: smallStepGiantLeap/frontend
+      methods: [hello.v1.HelloService/Hello]
+  ingress:
+    - service: smallStepGiantLeap/frontend

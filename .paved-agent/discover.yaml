@@ -49,3 +49,4 @@ docs:
 answers:
   - {question: staging_exists, answer: "no", detail: "there is no staging cluster; the real ladder is dev -> prod; deploy/envs/staging is rendered but unused"}
   - {question: traffic_holds_frontend_identity, answer: "yes", detail: "the traffic load generator in namespace frontend intentionally runs as service account frontend"}
+  - {question: traffic_generator_sends_blank_names, answer: "no", detail: "the dev traffic generator always sends a non-empty name; this change cannot affect its traffic"}

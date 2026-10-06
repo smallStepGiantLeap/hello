@@ -1,0 +1,51 @@
+# Identifiers the reviewer follows every run. Join keys, the stack binding
+# with its verification checks, the measurement queries the reviewer wrote
+# for this fleet, referenced docs, and answers to questions.
+# Never endpoints, never credentials, never live state.
+service: hello
+workloads:
+  - namespace: hello
+    selector: app=hello
+    container: hello
+    clusters: all
+    stack:
+      mesh:
+        is: "sidecar mesh with strict mTLS (istio 1.31.1)"
+        verify: "every istio_requests_total{destination_service_namespace=\"hello\"} series carries connection_security_policy=\"mutual_tls\"; istio_build{component=\"pilot\"} reports a tag"
+      deploy:
+        is: "GitOps-synced manifests (argo cd) and a progressive rollout object (argo rollouts) with an analysis template on the server-error ratio"
+        verify: "kube_replicaset_owner{namespace=\"hello\"} reports owner_kind=\"Rollout\"; kube_pod_info{namespace=\"argocd\"} returns a running application controller"
+      admission:
+        is: "pod security admission at enforce=restricted; webhooks are the mesh's and the autoscaler's only — no general policy engine"
+        verify: "kube_namespace_labels{namespace=\"hello\"} carries label_pod_security_kubernetes_io_enforce=\"restricted\"; kube_validatingwebhookconfiguration_info lists no gatekeeper or kyverno webhook"
+      enforcer:
+        is: "kubernetes NetworkPolicy objects (default-deny plus allow lists); the CNI enforcing them is not identifiable from metrics"
+        verify: "kube_networkpolicy_spec_ingress_rules{namespace=\"hello\",networkpolicy=\"default-deny\"} exists; no cilium_*, calico_* or antrea_* metric family"
+      autoscaler:
+        is: "event-driven autoscaler (keda) scaling the rollout on in-flight RPCs through a generated HPA"
+        verify: "kube_horizontalpodautoscaler_info{namespace=\"hello\",horizontalpodautoscaler=\"keda-hpa-hello\"} exists"
+      metrics:
+        is: "prometheus-compatible backend scraping kube-state-metrics, envoy sidecar stats and the service's own vikrant_* families; no cAdvisor families; no alerting rules"
+        verify: "vikrant_build_info{namespace=\"hello\"} returns a series; container_cpu_usage_seconds_total is absent"
+    measure:
+      instances: count by (cluster) (kube_pod_info{namespace="hello"} * on (namespace,pod) group_left kube_pod_status_ready{namespace="hello",condition="true"})
+      owner: kube_replicaset_owner{namespace="hello"}
+      desired: kube_replicaset_spec_replicas{namespace="hello"} > 0
+      ceiling: kube_horizontalpodautoscaler_spec_max_replicas{namespace="hello"}
+      floor: kube_horizontalpodautoscaler_spec_min_replicas{namespace="hello"}
+      rps: sum by (cluster, source_workload, response_code) (rate(istio_requests_total{destination_service_namespace="hello",reporter="destination"}[5m]))
+      callers: sum by (cluster, source_workload, source_principal) (rate(istio_requests_total{destination_service_namespace="hello",reporter="destination"}[1h]))
+      p99_ms: histogram_quantile(0.99, sum by (cluster, le) (rate(istio_request_duration_milliseconds_bucket{destination_service_namespace="hello",reporter="destination"}[5m])))
+      inflight: sum by (cluster, type) (vikrant_inflight_rpcs{namespace="hello"})
+      errors: sum by (cluster, code) (rate(vikrant_rpcs_handled_total{namespace="hello",code!="OK"}[5m]))
+      denials: sum by (cluster) (envoy_http_rbac{namespace="hello",authz_enforce_result="denied"})
+      limits: kube_pod_container_resource_limits{namespace="hello",container="hello"}
+      exposure: kube_service_spec_type{namespace="hello"}
+      pdb: kube_poddisruptionbudget_status_expected_pods{namespace="hello"}
+      alerts: ALERTS{alertstate="firing",namespace="hello"}
+      restarts: kube_pod_container_status_restarts_total{namespace="hello"}
+docs:
+  - README.md
+answers:
+  - {question: staging_exists, answer: "no", detail: "there is no staging cluster; the real ladder is dev -> prod; deploy/envs/staging is rendered but unused"}
+  - {question: traffic_holds_frontend_identity, answer: "yes", detail: "the traffic load generator in namespace frontend intentionally runs as service account frontend"}
